@@ -93,22 +93,51 @@ export async function getArticle(id: string) {
   return res.json();
 }
 
-export async function createArticle(data: any) {
+export async function createArticle(data: {
+  title: string;
+  slug: string;
+  summary?: string;
+  content: string;
+  imageUrl?: string;
+  author?: string;
+  status?: "draft" | "pending" | "published";
+}) {
   const res = await fetch(`${API_URL}/articles`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
 
+  if (!res.ok) {
+    const error = await res.json().catch(() => null);
+    throw new Error(error?.message || "Haber oluşturulamadı.");
+  }
+
   return res.json();
 }
 
-export async function updateArticle(id: string, data: any) {
+export async function updateArticle(
+  id: string,
+  data: {
+    title?: string;
+    slug?: string;
+    summary?: string;
+    content?: string;
+    imageUrl?: string;
+    author?: string;
+    status?: "draft" | "pending" | "published";
+  },
+) {
   const res = await fetch(`${API_URL}/articles/${id}`, {
     method: "PATCH",
     headers: authHeaders(),
     body: JSON.stringify(data),
   });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => null);
+    throw new Error(error?.message || "Haber güncellenemedi.");
+  }
 
   return res.json();
 }
@@ -129,6 +158,33 @@ export async function uploadProductImage(file: File) {
   formData.append("file", file);
 
   const res = await fetch(`${API_URL}/products/upload-image`, {
+    method: "POST",
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+
+    throw new Error(
+      data?.message || "Görsel yüklenemedi."
+    );
+  }
+
+  return res.json();
+}
+
+export async function uploadArticleImage(file: File) {
+  const token = getToken();
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}/articles/upload-image`, {
     method: "POST",
     headers: token
       ? {

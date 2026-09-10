@@ -1,8 +1,8 @@
 "use client";
 
+import { createArticle, uploadArticleImage } from "@/lib/api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createArticle } from "@/lib/api";
 
 export default function NewArticlePage() {
   const router = useRouter();
@@ -12,8 +12,11 @@ export default function NewArticlePage() {
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
   const [author, setAuthor] = useState("ComparaAI");
-  const [isPublished, setIsPublished] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState("draft");
   const [saving, setSaving] = useState(false);
+
 
   function generateSlug(value: string) {
     return value
@@ -55,21 +58,44 @@ export default function NewArticlePage() {
         summary: summary.trim(),
         content: content.trim(),
         author: author.trim() || "ComparaAI",
-        isPublished,
+        imageUrl: imageUrl || undefined,
+        status: isPublished ? "published" : "draft",
       });
 
-      alert(
-        isPublished
-          ? "Haber oluşturuldu ve yayınlandı."
-          : "Haber taslak olarak oluşturuldu."
-      );
+      if (status === "pending") {
+        alert("Haber oluşturuldu ve onay bekleyenlere gönderildi.");
+      } else {
+        alert("Haber taslak olarak kaydedildi.");
+      }
 
       router.push("/articles");
     } catch (error) {
       console.error(error);
-      alert("Haber oluşturulamadı.");
+      
+      const message = 
+        error instanceof Error
+          ? error.message
+          : "Bilinmeyen bir hata oluştu.";
+
+      alert(`Haber oluşturulamadı:\n${message}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      const result = await uploadArticleImage(file);
+      setImageUrl(result.url);
+    } catch (error) {
+      console.error(error);
+      alert("Görsel yüklenemedi.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -170,6 +196,31 @@ export default function NewArticlePage() {
               Yazar
             </label>
 
+          <div>
+            <label className="block text-sm text-slate-300 mb-2">
+              Kapak Görseli
+            </label>
+
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageChange}
+              className="w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-500"
+            />
+
+            {uploading && (
+              <p className="text-xs text-slate-400 mt-2">Yükleniyor...</p>
+            )}
+
+            {imageUrl && (
+              <img
+                src={imageUrl}
+                alt="Kapak Görseli"
+                className="mt-2 max-w-full h-auto border border-slate-700 rounded-lg"
+              />
+            )}
+          </div>
+
             <input
               type="text"
               value={author}
@@ -178,18 +229,29 @@ export default function NewArticlePage() {
             />
           </div>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isPublished}
-              onChange={(e) => setIsPublished(e.target.checked)}
-              className="w-4 h-4"
-            />
+          <div>
+            <label className="block text-sm text-slate-300 mb-2">
+              Haber Durumu
+            </label>
 
-            <span className="text-sm text-slate-300">
-              Haberi oluşturduktan hemen sonra yayınla
-            </span>
-          </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
+            >
+              <option value="draft">
+                Taslak
+              </option>
+
+              <option value="pending">
+                Onay Bekliyor
+              </option>
+            </select>
+
+            <p className="text-xs text-slate-500 mt-2">
+              Taslak haberler ve onay bekleyen haberler website'de görünmez.
+            </p>
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button
@@ -205,7 +267,11 @@ export default function NewArticlePage() {
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-6 py-3 rounded-lg font-semibold"
             >
-              {saving ? "Kaydediliyor..." : "Haberi Oluştur"}
+              {saving
+                ? "Kaydediliyor..."
+                : status === "pending"
+                ? "Onaya Gönder"
+                : "Taslak Olarak Kaydet"}
             </button>
           </div>
         </form>

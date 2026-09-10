@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getArticle, updateArticle } from "@/lib/api";
+import { getArticle, updateArticle, uploadArticleImage } from "@/lib/api";
+
+type ArticleStatus = "draft" | "pending" | "published";
 
 export default function EditArticlePage() {
   const params = useParams();
@@ -15,7 +17,14 @@ export default function EditArticlePage() {
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
   const [author, setAuthor] = useState("");
-  const [isPublished, setIsPublished] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [aiImportance, setAiImportance] = useState("");
+  const [aiWhyItMatters, setAiWhyItMatters] = useState("");
+  const [aiWhoItAffects, setAiWhoItAffects] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [status, setStatus] =
+    useState<ArticleStatus>("draft");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,7 +46,24 @@ export default function EditArticlePage() {
         setSummary(article.summary ?? "");
         setContent(article.content ?? "");
         setAuthor(article.author ?? "ComparaAI");
-        setIsPublished(Boolean(article.isPublished));
+        setImageUrl(article.imageUrl ?? "");
+        setAiImportance(article.aiImportance ?? "");
+        setAiWhyItMatters(article.aiWhyItMatters ?? "");
+        setAiWhoItAffects(article.aiWhoItAffects ?? "");
+
+        if (
+          article.status === "draft" ||
+          article.status === "pending" ||
+          article.status === "published"
+        ) {
+          setStatus(article.status);
+        } else {
+          setStatus(
+            article.isPublished
+              ? "published"
+              : "draft"
+          );
+        }
       } catch (error) {
         console.error(error);
         alert("Haber alınamadı.");
@@ -55,8 +81,15 @@ export default function EditArticlePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!title.trim() || !slug.trim() || !summary.trim() || !content.trim()) {
-      alert("Başlık, slug, özet ve içerik alanları zorunludur.");
+    if (
+      !title.trim() ||
+      !slug.trim() ||
+      !summary.trim() ||
+      !content.trim()
+    ) {
+      alert(
+        "Başlık, slug, özet ve içerik alanları zorunludur."
+      );
       return;
     }
 
@@ -69,7 +102,11 @@ export default function EditArticlePage() {
         summary: summary.trim(),
         content: content.trim(),
         author: author.trim() || "ComparaAI",
-        isPublished,
+        imageUrl: imageUrl || undefined,
+        status,
+        aiImportance: aiImportance || undefined,
+        aiWhyItMatters: aiWhyItMatters || undefined,
+        aiWhoItAffects: aiWhoItAffects || undefined,
       });
 
       alert("Haber başarıyla güncellendi.");
@@ -82,6 +119,60 @@ export default function EditArticlePage() {
       setSaving(false);
     }
   }
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploading(true);
+      const result = await uploadArticleImage(file);
+      setImageUrl(result.url);
+    } catch (error) {
+      console.error(error);
+      alert("Görsel yüklenemedi.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleAnalyze() {
+    if (!title.trim() || !content.trim()) {
+      alert("Analiz için başlık ve haber içeriği dolu olmalı.");
+      return;
+    }
+
+    try {
+    setAnalyzing(true);
+
+    const res = await fetch("http://localhost:8000/analyze-article", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: title.trim(),
+        content: content.trim(),
+      }),
+    });
+    if (!res.ok) {
+      throw new Error("Analiz başarısız oldu.");
+    }
+
+    const result = await res.json();
+
+    setSummary(result.summary);
+    setAiImportance(result.importance);
+    setAiWhyItMatters(result.why_it_matters);
+    setAiWhoItAffects(result.who_it_affects);
+
+  } catch (error) {
+    console.error(error);
+    alert("AI analizi yapılamadı. FastAPI servisinin (localhost:8000) çalıştığından emin olun.");
+
+  } finally {
+    setAnalyzing(false);
+  }
+
+}
 
   if (loading) {
     return (
@@ -106,7 +197,7 @@ export default function EditArticlePage() {
             </h1>
 
             <p className="text-slate-400 mt-2">
-              Haber bilgilerini güncelleyin.
+              Haber bilgilerini ve yayın durumunu güncelleyin.
             </p>
           </div>
 
@@ -131,7 +222,9 @@ export default function EditArticlePage() {
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) =>
+                setTitle(e.target.value)
+              }
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
               required
             />
@@ -145,7 +238,9 @@ export default function EditArticlePage() {
             <input
               type="text"
               value={slug}
-              onChange={(e) => setSlug(e.target.value)}
+              onChange={(e) =>
+                setSlug(e.target.value)
+              }
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
               required
             />
@@ -158,7 +253,9 @@ export default function EditArticlePage() {
 
             <textarea
               value={summary}
-              onChange={(e) => setSummary(e.target.value)}
+              onChange={(e) =>
+                setSummary(e.target.value)
+              }
               rows={4}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
               required
@@ -172,7 +269,9 @@ export default function EditArticlePage() {
 
             <textarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) =>
+                setContent(e.target.value)
+              }
               rows={14}
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
               required
@@ -187,23 +286,110 @@ export default function EditArticlePage() {
             <input
               type="text"
               value={author}
-              onChange={(e) => setAuthor(e.target.value)}
+              onChange={(e) =>
+                setAuthor(e.target.value)
+              }
               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
             />
           </div>
+          
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm text-slate-300">
+                AI Haber Analizi
+              </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                disabled={analyzing}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                {analyzing ? "Analiz ediliyor..." : "AI ile Analiz Et"}
+              </button>
+            </div>
+
+            {aiImportance && (
+              <div className="text-sm text-slate-300 space-y-2">
+                <p>
+                  <span className="text-slate-500">Önem derecesi:</span>{" "}
+                  <span className="font-semibold">{aiImportance}</span>
+                </p>
+                <p>
+                  <span className="text-slate-500">Neden önemli:</span>{" "}
+                  {aiWhyItMatters}
+                </p>
+                <p>
+                  <span className="text-slate-500">Kimi etkiler:</span>{" "}
+                  {aiWhoItAffects}
+                </p>
+              </div>
+            )}
+
+            {!aiImportance && (
+              <p className="text-xs text-slate-500">
+                Henüz analiz yapılmadı. Başlık ve içerik doldurulduktan sonra butona basın.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-300 mb-2">
+              Kapak Görseli
+            </label>
+
             <input
-              type="checkbox"
-              checked={isPublished}
-              onChange={(e) => setIsPublished(e.target.checked)}
-              className="w-4 h-4"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleImageChange}
+              className="w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-500"
             />
 
-            <span className="text-sm text-slate-300">
-              Haber yayında olsun
-            </span>
-          </label>
+            {uploading && (
+              <p className="text-xs text-slate-400 mt-2">Yükleniyor...</p>
+            )}
+
+            {imageUrl && (
+              <img
+                src={`http://localhost:3001${imageUrl}`}
+                alt="Önizleme"
+                className="mt-3 h-32 rounded-lg object-cover"
+              />
+            )}
+          </div>
+          
+          <div>
+            <label className="block text-sm text-slate-300 mb-2">
+              Haber Durumu
+            </label>
+
+            <select
+              value={status}
+              onChange={(e) =>
+                setStatus(
+                  e.target.value as ArticleStatus
+                )
+              }
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-white outline-none focus:border-blue-400"
+            >
+              <option value="draft">
+                Taslak
+              </option>
+
+              <option value="pending">
+                Onay Bekliyor
+              </option>
+
+              <option value="published">
+                Yayında
+              </option>
+            </select>
+
+            <p className="text-xs text-slate-500 mt-2">
+              Yayındaki haber website'de görünür.
+              Taslak ve onay bekleyen haberler website'de görünmez.
+            </p>
+          </div>
 
           <div className="flex gap-3 pt-2">
             <button
@@ -219,7 +405,9 @@ export default function EditArticlePage() {
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-6 py-3 rounded-lg font-semibold"
             >
-              {saving ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
+              {saving
+                ? "Kaydediliyor..."
+                : "Değişiklikleri Kaydet"}
             </button>
           </div>
         </form>
