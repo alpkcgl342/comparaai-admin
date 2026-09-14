@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import {
   AI_SERVICE_URL,
   getArticle,
+  getDuplicateCandidates,
   getProducts,
+  saveArticleDuplicates,
   saveArticleEntities,
   updateArticle,
   uploadArticleImage,
@@ -23,6 +25,11 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   company: "Şirket",
   product: "Ürün",
   technology: "Teknoloji",
+};
+
+type ArticleDuplicate = {
+  similarityScore: number;
+  duplicateOfArticle?: { id: string; title: string } | null;
 };
 
 type ArticleStatus = "draft" | "pending" | "published";
@@ -46,6 +53,8 @@ export default function EditArticlePage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [entities, setEntities] = useState<ArticleEntity[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const [duplicates, setDuplicates] = useState<ArticleDuplicate[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [status, setStatus] =
     useState<ArticleStatus>("draft");
 
@@ -71,6 +80,7 @@ export default function EditArticlePage() {
         setAuthor(article.author ?? "ComparaAI");
         setImageUrl(article.imageUrl ?? "");
         setEntities(article.entities ?? []);
+        setDuplicates(article.duplicatesOf ?? []);
         setAiImportance(article.aiImportance ?? "");
         setAiWhyItMatters(article.aiWhyItMatters ?? "");
         setAiWhoItAffects(article.aiWhoItAffects ?? "");
@@ -237,6 +247,45 @@ export default function EditArticlePage() {
       );
     } finally {
       setExtracting(false);
+    }
+  }
+
+  async function handleCheckDuplicates() {
+    if (!title.trim() || !summary.trim()) {
+      alert("Benzerlik kontrolü için başlık ve özet dolu olmalı.");
+      return;
+    }
+
+    try {
+      setCheckingDuplicates(true);
+
+      const candidates = await getDuplicateCandidates(id, 7);
+
+      const res = await fetch(`${AI_SERVICE_URL}/detect-duplicates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          summary: summary.trim(),
+          candidates,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Benzerlik kontrolü başarısız oldu.");
+      }
+
+      const result = await res.json();
+      const saved = await saveArticleDuplicates(id, result.duplicates ?? []);
+
+      setDuplicates(saved as ArticleDuplicate[]);
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Benzerlik kontrolü yapılamadı. AI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setCheckingDuplicates(false);
     }
   }
 
@@ -438,6 +487,46 @@ export default function EditArticlePage() {
               <p className="text-xs text-slate-500">
                 Henüz varlık çıkarılmadı. Bu haberde geçen şirket/ürün/teknoloji
                 isimlerini bulup ürün veritabanınızla eşleştirir.
+              </p>
+            )}
+          </div>
+
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm text-slate-300">
+                Benzer Haber Kontrolü
+              </label>
+
+              <button
+                type="button"
+                onClick={handleCheckDuplicates}
+                disabled={checkingDuplicates}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                {checkingDuplicates ? "Kontrol ediliyor..." : "Benzerlik Kontrolü Yap"}
+              </button>
+            </div>
+
+            {duplicates.length > 0 ? (
+              <div className="space-y-2">
+                {duplicates.map((d, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm"
+                  >
+                    <span>
+                      ⚠️ <span className="font-medium">{d.duplicateOfArticle?.title}</span>{" "}
+                      ile benzer olabilir
+                    </span>
+                    <span className="text-amber-400 text-xs shrink-0 ml-3">
+                      %{Math.round(d.similarityScore * 100)} benzer
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Son 7 gündeki haberlerle henüz karşılaştırılmadı.
               </p>
             )}
           </div>

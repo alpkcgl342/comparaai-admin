@@ -127,6 +127,34 @@ export async function saveArticleEntities(id: string, entities: unknown[]) {
   return res.json();
 }
 
+// Faz 2 — Duplicate haber tespiti: aday listesini çeker.
+export async function getDuplicateCandidates(id: string, days = 7) {
+  const res = await fetch(
+    `${API_URL}/articles/${id}/duplicate-candidates?days=${days}`,
+    { cache: "no-store", headers: authHeaders() },
+  );
+
+  if (!res.ok) {
+    throw new Error("Aday haberler alınamadı.");
+  }
+
+  return res.json();
+}
+
+export async function saveArticleDuplicates(id: string, duplicates: unknown[]) {
+  const res = await fetch(`${API_URL}/articles/${id}/duplicates`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ duplicates }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Duplicate sonucu kaydedilemedi.");
+  }
+
+  return res.json();
+}
+
 export async function createArticle(data: {
   title: string;
   slug: string;
