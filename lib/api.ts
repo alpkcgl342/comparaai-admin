@@ -191,6 +191,8 @@ export async function updateArticle(
     aiImportance?: string;
     aiWhyItMatters?: string;
     aiWhoItAffects?: string;
+    seoMetaDescription?: string;
+    tags?: string[];
   },
 ) {
   const res = await fetch(`${API_URL}/articles/${id}`, {

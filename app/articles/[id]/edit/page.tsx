@@ -55,6 +55,10 @@ export default function EditArticlePage() {
   const [extracting, setExtracting] = useState(false);
   const [duplicates, setDuplicates] = useState<ArticleDuplicate[]>([]);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [seoMetaDescription, setSeoMetaDescription] = useState("");
+  const [tagsText, setTagsText] = useState("");
+  const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
+  const [suggestingMeta, setSuggestingMeta] = useState(false);
   const [status, setStatus] =
     useState<ArticleStatus>("draft");
 
@@ -81,6 +85,8 @@ export default function EditArticlePage() {
         setImageUrl(article.imageUrl ?? "");
         setEntities(article.entities ?? []);
         setDuplicates(article.duplicatesOf ?? []);
+        setSeoMetaDescription(article.seoMetaDescription ?? "");
+        setTagsText((article.tags ?? []).join(", "));
         setAiImportance(article.aiImportance ?? "");
         setAiWhyItMatters(article.aiWhyItMatters ?? "");
         setAiWhoItAffects(article.aiWhoItAffects ?? "");
@@ -141,6 +147,11 @@ export default function EditArticlePage() {
         aiImportance: aiImportance || undefined,
         aiWhyItMatters: aiWhyItMatters || undefined,
         aiWhoItAffects: aiWhoItAffects || undefined,
+        seoMetaDescription: seoMetaDescription || undefined,
+        tags: tagsText
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
       });
 
       alert("Haber başarıyla güncellendi.");
@@ -286,6 +297,43 @@ export default function EditArticlePage() {
       );
     } finally {
       setCheckingDuplicates(false);
+    }
+  }
+
+  async function handleSuggestMeta() {
+    if (!content.trim()) {
+      alert("AI Editör önerisi için haber içeriği dolu olmalı.");
+      return;
+    }
+
+    try {
+      setSuggestingMeta(true);
+
+      const res = await fetch(`${AI_SERVICE_URL}/suggest-article-meta`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          content: content.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Öneri alınamadı.");
+      }
+
+      const result = await res.json();
+
+      setTitleSuggestions(result.title_suggestions ?? []);
+      setSeoMetaDescription(result.seo_meta_description ?? "");
+      setTagsText((result.tags ?? []).join(", "));
+    } catch (error) {
+      console.error(error);
+      alert(
+        "AI Editör önerisi alınamadı. AI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setSuggestingMeta(false);
     }
   }
 
@@ -529,6 +577,73 @@ export default function EditArticlePage() {
                 Son 7 gündeki haberlerle henüz karşılaştırılmadı.
               </p>
             )}
+          </div>
+
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-slate-300">
+                AI Editör (başlık / SEO / etiket önerisi)
+              </label>
+
+              <button
+                type="button"
+                onClick={handleSuggestMeta}
+                disabled={suggestingMeta}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                {suggestingMeta ? "Öneriliyor..." : "AI ile Öner"}
+              </button>
+            </div>
+
+            {titleSuggestions.length > 0 && (
+              <div>
+                <p className="text-xs text-slate-500 mb-2">
+                  Başlık önerileri (tıklayınca yukarıdaki başlığa uygulanır):
+                </p>
+                <div className="flex flex-col gap-2">
+                  {titleSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setTitle(s)}
+                      className="text-left text-sm rounded-lg border border-slate-700 px-3 py-2 hover:border-blue-500 hover:bg-slate-900"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                SEO Meta Açıklaması
+              </label>
+              <textarea
+                value={seoMetaDescription}
+                onChange={(e) => setSeoMetaDescription(e.target.value)}
+                rows={2}
+                maxLength={160}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Arama motoru sonuçlarında görünecek kısa açıklama (120-160 karakter)"
+              />
+              <p className="text-xs text-slate-600 mt-1">
+                {seoMetaDescription.length}/160 karakter
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                Etiketler (virgülle ayırın)
+              </label>
+              <input
+                type="text"
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
+                placeholder="Samsung, Galaxy A55, 5G"
+              />
+            </div>
           </div>
 
           <div>
