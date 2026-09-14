@@ -59,7 +59,7 @@ export default function NewArticlePage() {
         content: content.trim(),
         author: author.trim() || "ComparaAI",
         imageUrl: imageUrl || undefined,
-        status: isPublished ? "published" : "draft",
+        status: status as "draft" | "pending" | "published",
       });
 
       if (status === "pending") {

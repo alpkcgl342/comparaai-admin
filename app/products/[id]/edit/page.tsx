@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
+  AI_SERVICE_URL,
   getCategories,
   getProduct,
+  saveProductAiScore,
   updateProduct,
   uploadProductImage,
 } from "@/lib/api";
@@ -15,6 +17,16 @@ type Category = {
   slug: string;
 };
 
+type AiScore = {
+  overallScore: number;
+  aiSummary?: string | null;
+  bestFor?: string[];
+  notFor?: string[];
+  weaknesses?: unknown;
+  suggestedSegment?: string | null;
+  computedAt?: string;
+};
+
 type Product = {
   name?: string;
   brand?: string;
@@ -22,6 +34,13 @@ type Product = {
   segment?: string;
   imageUrl?: string | null;
   specs?: Record<string, unknown>;
+  aiScore?: AiScore | null;
+};
+
+const SEGMENT_LABELS: Record<string, string> = {
+  ekonomik: "Ekonomik",
+  orta: "Orta",
+  ust: "Üst",
 };
 
 export default function EditProduct() {
@@ -40,6 +59,9 @@ export default function EditProduct() {
   const [imageUploading, setImageUploading] = useState(false);
 
   const [specsText, setSpecsText] = useState("{}");
+
+  const [aiScore, setAiScore] = useState<AiScore | null>(null);
+  const [scoring, setScoring] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,6 +90,8 @@ export default function EditProduct() {
             2,
           ),
         );
+
+        setAiScore(currentProduct.aiScore ?? null);
 
         setCategories(cats);
       } catch (err) {
@@ -132,6 +156,59 @@ export default function EditProduct() {
       setImageUrl("");
     } finally {
       setImageUploading(false);
+    }
+  }
+
+  async function handleScoreWithAi() {
+    if (!name.trim() || !brand.trim() || !categoryId) {
+      setError(
+        "AI ile puanlamadan önce ürün adı, marka ve kategori dolu olmalı.",
+      );
+      return;
+    }
+
+    let specs: Record<string, unknown>;
+
+    try {
+      specs = JSON.parse(specsText);
+    } catch {
+      setError("Özellikler alanı geçerli bir JSON olmalı.");
+      return;
+    }
+
+    const category = categories.find((c) => c.id === categoryId);
+
+    try {
+      setError("");
+      setScoring(true);
+
+      const res = await fetch(`${AI_SERVICE_URL}/score-product`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          name: name.trim(),
+          brand: brand.trim(),
+          category: category?.name ?? "Bilinmiyor",
+          specs,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("AI puanlaması başarısız oldu.");
+      }
+
+      const result = await res.json();
+      const saved = await saveProductAiScore(id, result);
+
+      setAiScore(saved as AiScore);
+    } catch (err) {
+      console.error(err);
+      setError(
+        "AI ile puanlama yapılamadı. FastAPI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setScoring(false);
     }
   }
 
@@ -366,6 +443,97 @@ export default function EditProduct() {
                 Üst
               </option>
             </select>
+          </div>
+
+          {/* AI Ürün Skoru */}
+          <div
+            className="rounded-lg border p-4"
+            style={{
+              background: "var(--surface-soft, transparent)",
+              borderColor: "var(--border)",
+            }}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <label className="text-sm font-medium">
+                AI Ürün Skoru
+              </label>
+
+              <button
+                type="button"
+                onClick={handleScoreWithAi}
+                disabled={scoring}
+                className="rounded-lg px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ background: "var(--primary)" }}
+              >
+                {scoring ? "Puanlanıyor..." : "AI ile Puanla"}
+              </button>
+            </div>
+
+            {!aiScore && !scoring && (
+              <p
+                className="text-xs"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Bu ürün için henüz AI puanı üretilmedi.
+              </p>
+            )}
+
+            {aiScore && (
+              <div className="flex flex-col gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="rounded-full px-3 py-1 text-xs font-bold text-white"
+                    style={{ background: "var(--primary)" }}
+                  >
+                    {Math.round(aiScore.overallScore)}/100
+                  </span>
+
+                  {aiScore.suggestedSegment && (
+                    <span
+                      className="text-xs"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      AI önerisi:{" "}
+                      {SEGMENT_LABELS[aiScore.suggestedSegment] ??
+                        aiScore.suggestedSegment}{" "}
+                      segment
+                      {aiScore.suggestedSegment !== segment &&
+                        " (mevcut seçimden farklı)"}
+                    </span>
+                  )}
+                </div>
+
+                {aiScore.aiSummary && (
+                  <p style={{ color: "var(--text-secondary)" }}>
+                    {aiScore.aiSummary}
+                  </p>
+                )}
+
+                {!!aiScore.bestFor?.length && (
+                  <div>
+                    <p className="text-xs font-medium">Kime uygun:</p>
+                    <ul className="list-disc pl-5 text-xs">
+                      {aiScore.bestFor.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {!!aiScore.notFor?.length && (
+                  <div>
+                    <p className="text-xs font-medium">
+                      Kime uygun değil:
+                    </p>
+                    <ul className="list-disc pl-5 text-xs">
+                      {aiScore.notFor.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Görsel yükleme */}

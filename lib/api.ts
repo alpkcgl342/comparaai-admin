@@ -1,4 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+export const AI_SERVICE_URL =
+  process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
 
 function getToken() {
   if (typeof window === "undefined") return null;
@@ -51,6 +53,23 @@ export async function deleteProduct(id: string) {
     method: "DELETE",
     headers: authHeaders(),
   });
+  return res.json();
+}
+
+// Faz 3 P0 — AI Ürün Skoru. comparaai-ai'nin /score-product yanıtını
+// (haber analizindeki pattern ile aynı şekilde, tarayıcıdan doğrudan
+// çağrılmış) backend'e kaydettirir.
+export async function saveProductAiScore(id: string, score: unknown) {
+  const res = await fetch(`${API_URL}/products/${id}/ai-score`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(score),
+  });
+
+  if (!res.ok) {
+    throw new Error("AI puanı kaydedilemedi.");
+  }
+
   return res.json();
 }
 
@@ -126,6 +145,9 @@ export async function updateArticle(
     imageUrl?: string;
     author?: string;
     status?: "draft" | "pending" | "published";
+    aiImportance?: string;
+    aiWhyItMatters?: string;
+    aiWhoItAffects?: string;
   },
 ) {
   const res = await fetch(`${API_URL}/articles/${id}`, {

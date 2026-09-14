@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getArticle, updateArticle, uploadArticleImage } from "@/lib/api";
+import {
+  AI_SERVICE_URL,
+  getArticle,
+  updateArticle,
+  uploadArticleImage,
+} from "@/lib/api";
 
 type ArticleStatus = "draft" | "pending" | "published";
 
@@ -145,7 +150,7 @@ export default function EditArticlePage() {
     try {
     setAnalyzing(true);
 
-    const res = await fetch("http://localhost:8000/analyze-article", {
+    const res = await fetch(`${AI_SERVICE_URL}/analyze-article`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
