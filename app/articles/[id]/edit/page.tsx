@@ -5,9 +5,25 @@ import { useParams, useRouter } from "next/navigation";
 import {
   AI_SERVICE_URL,
   getArticle,
+  getProducts,
+  saveArticleEntities,
   updateArticle,
   uploadArticleImage,
 } from "@/lib/api";
+
+type ArticleEntity = {
+  entityType: string;
+  entityName: string;
+  productId?: string | null;
+  confidence?: number | null;
+  product?: { id: string; name: string; brand: string } | null;
+};
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  company: "Şirket",
+  product: "Ürün",
+  technology: "Teknoloji",
+};
 
 type ArticleStatus = "draft" | "pending" | "published";
 
@@ -28,6 +44,8 @@ export default function EditArticlePage() {
   const [aiWhyItMatters, setAiWhyItMatters] = useState("");
   const [aiWhoItAffects, setAiWhoItAffects] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [entities, setEntities] = useState<ArticleEntity[]>([]);
+  const [extracting, setExtracting] = useState(false);
   const [status, setStatus] =
     useState<ArticleStatus>("draft");
 
@@ -52,6 +70,7 @@ export default function EditArticlePage() {
         setContent(article.content ?? "");
         setAuthor(article.author ?? "ComparaAI");
         setImageUrl(article.imageUrl ?? "");
+        setEntities(article.entities ?? []);
         setAiImportance(article.aiImportance ?? "");
         setAiWhyItMatters(article.aiWhyItMatters ?? "");
         setAiWhoItAffects(article.aiWhoItAffects ?? "");
@@ -178,6 +197,48 @@ export default function EditArticlePage() {
   }
 
 }
+
+  async function handleExtractEntities() {
+    if (!title.trim() || !content.trim()) {
+      alert("Varlık çıkarımı için başlık ve haber içeriği dolu olmalı.");
+      return;
+    }
+
+    try {
+      setExtracting(true);
+
+      const products = await getProducts();
+      const knownProducts = (products as { id: string; name: string; brand: string }[]).map(
+        (p) => ({ id: p.id, name: p.name, brand: p.brand }),
+      );
+
+      const res = await fetch(`${AI_SERVICE_URL}/extract-entities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          content: content.trim(),
+          known_products: knownProducts,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Varlık çıkarımı başarısız oldu.");
+      }
+
+      const result = await res.json();
+      const saved = await saveArticleEntities(id, result.entities ?? []);
+
+      setEntities(saved as ArticleEntity[]);
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Varlıklar çıkarılamadı. AI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -334,6 +395,49 @@ export default function EditArticlePage() {
             {!aiImportance && (
               <p className="text-xs text-slate-500">
                 Henüz analiz yapılmadı. Başlık ve içerik doldurulduktan sonra butona basın.
+              </p>
+            )}
+          </div>
+
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm text-slate-300">
+                Varlıklar (Şirket / Ürün / Teknoloji)
+              </label>
+
+              <button
+                type="button"
+                onClick={handleExtractEntities}
+                disabled={extracting}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                {extracting ? "Çıkarılıyor..." : "Varlıkları Çıkar"}
+              </button>
+            </div>
+
+            {entities.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {entities.map((e, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs"
+                  >
+                    <span className="text-slate-500">
+                      {ENTITY_TYPE_LABELS[e.entityType] ?? e.entityType}:
+                    </span>
+                    <span className="font-medium">{e.entityName}</span>
+                    {e.product && (
+                      <span className="text-emerald-400">
+                        → {e.product.brand} {e.product.name}
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Henüz varlık çıkarılmadı. Bu haberde geçen şirket/ürün/teknoloji
+                isimlerini bulup ürün veritabanınızla eşleştirir.
               </p>
             )}
           </div>

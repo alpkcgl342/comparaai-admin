@@ -112,6 +112,21 @@ export async function getArticle(id: string) {
   return res.json();
 }
 
+// Faz 2 — comparaai-ai'nin /extract-entities yanıtını backend'e kaydettirir.
+export async function saveArticleEntities(id: string, entities: unknown[]) {
+  const res = await fetch(`${API_URL}/articles/${id}/entities`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ entities }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Varlıklar kaydedilemedi.");
+  }
+
+  return res.json();
+}
+
 export async function createArticle(data: {
   title: string;
   slug: string;
