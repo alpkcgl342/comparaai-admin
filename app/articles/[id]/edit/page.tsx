@@ -27,6 +27,12 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   technology: "Teknoloji",
 };
 
+const VERIFY_ISSUE_LABELS: Record<string, string> = {
+  celiski: "⚠️ Çelişki",
+  abartili_iddia: "🔺 Abartılı İddia",
+  kaynak_belirsiz: "❓ Kaynak Belirsiz",
+};
+
 type ArticleDuplicate = {
   similarityScore: number;
   duplicateOfArticle?: { id: string; title: string } | null;
@@ -59,6 +65,24 @@ export default function EditArticlePage() {
   const [tagsText, setTagsText] = useState("");
   const [titleSuggestions, setTitleSuggestions] = useState<string[]>([]);
   const [suggestingMeta, setSuggestingMeta] = useState(false);
+
+  type VerifyIssue = {
+    issue_type: string;
+    excerpt: string;
+    explanation: string;
+    suggestion: string;
+  };
+  const [verifyIssues, setVerifyIssues] = useState<VerifyIssue[] | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  type SourceComparison = {
+    consensus: string[];
+    differences: string[];
+    emphasis_notes: string[];
+  };
+  const [sourceComparison, setSourceComparison] =
+    useState<SourceComparison | null>(null);
+  const [comparingSources, setComparingSources] = useState(false);
   const [status, setStatus] =
     useState<ArticleStatus>("draft");
 
@@ -337,6 +361,82 @@ export default function EditArticlePage() {
     }
   }
 
+  async function handleVerify() {
+    if (!title.trim() || !content.trim()) {
+      alert("Doğrulama kontrolü için başlık ve içerik dolu olmalı.");
+      return;
+    }
+
+    try {
+      setVerifying(true);
+
+      const res = await fetch(`${AI_SERVICE_URL}/verify-article`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Doğrulama kontrolü başarısız oldu.");
+      }
+
+      const result = await res.json();
+      setVerifyIssues(result.issues ?? []);
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Doğrulama kontrolü yapılamadı. AI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function handleCompareSources() {
+    if (duplicates.length === 0) {
+      return;
+    }
+
+    try {
+      setComparingSources(true);
+
+      const otherArticles = await Promise.all(
+        duplicates
+          .filter((d) => d.duplicateOfArticle?.id)
+          .map((d) => getArticle(d.duplicateOfArticle!.id)),
+      );
+
+      const articlesPayload = [
+        { author: author || null, title: title.trim(), content: content.trim() },
+        ...otherArticles.map((a) => ({
+          author: a.author || null,
+          title: a.title,
+          content: a.content,
+        })),
+      ];
+
+      const res = await fetch(`${AI_SERVICE_URL}/compare-sources`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articles: articlesPayload }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Kaynak karşılaştırması başarısız oldu.");
+      }
+
+      const result = await res.json();
+      setSourceComparison(result as SourceComparison);
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Kaynaklar karşılaştırılamadı. AI servisinin (comparaai-ai) çalıştığından emin olun.",
+      );
+    } finally {
+      setComparingSources(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#050810] text-white p-8">
@@ -499,6 +599,56 @@ export default function EditArticlePage() {
           <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50">
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm text-slate-300">
+                AI Doğrulama Yardımcısı
+              </label>
+
+              <button
+                type="button"
+                onClick={handleVerify}
+                disabled={verifying}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+              >
+                {verifying ? "Kontrol ediliyor..." : "Doğrulama Kontrolü Yap"}
+              </button>
+            </div>
+
+            {verifyIssues === null && (
+              <p className="text-xs text-slate-500">
+                Çelişkili ifade, abartılı iddia veya kaynağı belirsiz istatistik
+                var mı diye kontrol eder. Otomatik reddetmez, sadece uyarır.
+              </p>
+            )}
+
+            {verifyIssues !== null && verifyIssues.length === 0 && (
+              <p className="text-xs text-emerald-400">
+                ✓ Belirgin bir sorun tespit edilmedi.
+              </p>
+            )}
+
+            {verifyIssues !== null && verifyIssues.length > 0 && (
+              <div className="space-y-2">
+                {verifyIssues.map((issue, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm space-y-1"
+                  >
+                    <p className="font-medium text-amber-400">
+                      {VERIFY_ISSUE_LABELS[issue.issue_type] ?? issue.issue_type}
+                    </p>
+                    <p className="text-slate-300 italic">"{issue.excerpt}"</p>
+                    <p className="text-slate-400 text-xs">{issue.explanation}</p>
+                    <p className="text-slate-500 text-xs">
+                      Öneri: {issue.suggestion}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-950/50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm text-slate-300">
                 Varlıklar (Şirket / Ürün / Teknoloji)
               </label>
 
@@ -571,6 +721,60 @@ export default function EditArticlePage() {
                     </span>
                   </div>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={handleCompareSources}
+                  disabled={comparingSources}
+                  className="mt-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-semibold"
+                >
+                  {comparingSources
+                    ? "Karşılaştırılıyor..."
+                    : "Kaynakları Karşılaştır"}
+                </button>
+
+                {sourceComparison && (
+                  <div className="mt-3 space-y-3 text-sm">
+                    {sourceComparison.consensus.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-400 mb-1">
+                          Ortak noktalar
+                        </p>
+                        <ul className="list-disc pl-5 space-y-0.5 text-slate-300">
+                          {sourceComparison.consensus.map((c, i) => (
+                            <li key={i}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {sourceComparison.differences.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-400 mb-1">
+                          Farklılıklar
+                        </p>
+                        <ul className="list-disc pl-5 space-y-0.5 text-slate-300">
+                          {sourceComparison.differences.map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {sourceComparison.emphasis_notes.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-slate-400 mb-1">
+                          Vurgu farkları
+                        </p>
+                        <ul className="list-disc pl-5 space-y-0.5 text-slate-300">
+                          {sourceComparison.emphasis_notes.map((e, i) => (
+                            <li key={i}>{e}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-slate-500">
