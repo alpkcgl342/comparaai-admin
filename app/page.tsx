@@ -87,6 +87,21 @@ export default function Home() {
               Haber oluştur, düzenle ve yayınla.
             </p>
           </Link>
+
+          <Link
+            href="/reports"
+            className="bg-slate-900 border border-blue-500/20 rounded-xl p-6 hover:border-blue-400 transition"
+          >
+            <div className="text-3xl mb-4">📊</div>
+
+            <h2 className="text-xl font-semibold">
+              Raporlar
+            </h2>
+
+            <p className="text-slate-400 text-sm mt-2">
+              Trend tespiti, şirket/teknoloji analizi, günlük/haftalık rapor.
+            </p>
+          </Link>
         </div>
       </div>
     </main>

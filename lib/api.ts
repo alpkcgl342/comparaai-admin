@@ -271,3 +271,56 @@ export async function uploadArticleImage(file: File) {
 
   return res.json();
 }
+
+// Faz 6 — Trend/Rapor özellikleri.
+export async function getTrending(days = 7, limit = 20) {
+  const res = await fetch(
+    `${API_URL}/reports/trending?days=${days}&limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error("Trendler alınamadı.");
+  return res.json();
+}
+
+export async function getEntityContext(entityName: string) {
+  const res = await fetch(
+    `${API_URL}/reports/context/${encodeURIComponent(entityName)}`,
+    { cache: "no-store", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error("Bağlam alınamadı.");
+  return res.json();
+}
+
+export async function getRecentArticlesForReport(days = 7) {
+  const res = await fetch(
+    `${API_URL}/reports/recent-articles?days=${days}`,
+    { cache: "no-store", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error("Haberler alınamadı.");
+  return res.json();
+}
+
+export async function getReports(type?: string) {
+  const res = await fetch(
+    `${API_URL}/reports${type ? `?type=${type}` : ""}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error("Raporlar alınamadı.");
+  return res.json();
+}
+
+export async function saveReport(data: {
+  type: string;
+  title?: string;
+  content: unknown;
+  periodStart?: string;
+  periodEnd?: string;
+}) {
+  const res = await fetch(`${API_URL}/reports`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Rapor kaydedilemedi.");
+  return res.json();
+}
